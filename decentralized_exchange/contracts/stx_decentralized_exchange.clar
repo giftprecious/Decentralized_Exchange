@@ -49,3 +49,16 @@
 (define-constant err-pair-not-found (err u111))
 (define-constant err-same-token (err u112))
 
+;; Define data variables
+(define-data-var protocol-fee-percent uint u30) ;; 0.3% fee by default
+
+;; Define data maps
+(define-map pairs 
+  { token-a: principal, token-b: principal } 
+  { 
+    reserve-a: uint, 
+    reserve-b: uint,
+    liquidity-total: uint
+  }
+)
+
