@@ -394,3 +394,15 @@
   )
 )
 
+(define-private (sqrt-iter (x uint) (guess uint))
+  (let
+    (
+      (next-guess (/ (+ guess (/ x guess)) u2))
+    )
+    (if (or (is-eq guess next-guess) (is-eq guess (- next-guess u1)))
+      guess
+      (sqrt-iter x next-guess)
+    )
+  )
+)
+
