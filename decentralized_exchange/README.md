@@ -97,3 +97,6 @@ The first liquidity provider for a pair establishes the initial price ratio. Sub
 - Front-running protection is not implemented in this version
 - No flash loan protection
 - Users should be aware of potential slippage when trading
+
+License
+[Insert your license information here]
