@@ -62,3 +62,126 @@
   }
 )
 
+
+(define-map liquidity-providers
+  { token-a: principal, token-b: principal, provider: principal }
+  { liquidity-provided: uint }
+)
+
+;; Create a token pair
+(define-public (create-pair (token-a-contract <sip-010-trait>) (token-b-contract <sip-010-trait>))
+  (let
+    (
+      (token-a (contract-of token-a-contract))
+      (token-b (contract-of token-b-contract))
+    )
+    (begin
+      ;; Check tokens are different
+      (asserts! (not (is-eq token-a token-b)) err-same-token)
+      
+      ;; Make sure token-a is lexicographically smaller than token-b for consistent ordering
+      (if (> (unwrap-panic (contract-call? token-a-contract get-name)) 
+             (unwrap-panic (contract-call? token-b-contract get-name)))
+        (create-pair-helper token-b-contract token-a-contract)
+        (create-pair-helper token-a-contract token-b-contract)
+      )
+    )
+  )
+)
+
+;; Helper function to ensure pairs are always stored with the same ordering
+(define-private (create-pair-helper (token-a-contract <sip-010-trait>) (token-b-contract <sip-010-trait>))
+  (let
+    (
+      (token-a (contract-of token-a-contract))
+      (token-b (contract-of token-b-contract))
+      (pair-exists (map-get? pairs { token-a: token-a, token-b: token-b }))
+    )
+    (begin
+      ;; Check if pair already exists
+      (asserts! (not pair-exists) err-pair-exists)
+      
+      ;; Create the pair with zero reserves
+      (map-set pairs 
+        { token-a: token-a, token-b: token-b }
+        { reserve-a: u0, reserve-b: u0, liquidity-total: u0 }
+      )
+      
+      (ok true)
+    )
+  )
+)
+
+
+;; Add liquidity to a pair
+(define-public (add-liquidity 
+  (token-a-contract <sip-010-trait>) 
+  (token-b-contract <sip-010-trait>) 
+  (amount-a uint) 
+  (amount-b uint)
+  (min-liquidity uint))
+  (let
+    (
+      (token-a (contract-of token-a-contract))
+      (token-b (contract-of token-b-contract))
+      (pair-data (unwrap! (map-get? pairs { token-a: token-a, token-b: token-b }) err-pair-not-found))
+      (reserve-a (get reserve-a pair-data))
+      (reserve-b (get reserve-b pair-data))
+      (liquidity-total (get liquidity-total pair-data))
+      (liquidity-minted uint)
+      (is-initial-liquidity (is-eq liquidity-total u0))
+    )
+    (begin
+      ;; Check amounts are valid
+      (asserts! (> amount-a u0) err-zero-amount)
+      (asserts! (> amount-b u0) err-zero-amount)
+      
+      ;; Transfer tokens to the contract
+      (try! (contract-call? token-a-contract transfer amount-a tx-sender (as-contract tx-sender) none))
+      (try! (contract-call? token-b-contract transfer amount-b tx-sender (as-contract tx-sender) none))
+      
+      ;; Calculate liquidity to mint
+      (if is-initial-liquidity
+        ;; For the first liquidity provision, liquidity tokens = sqrt(amount-a * amount-b)
+        (set liquidity-minted (sqrt (* amount-a amount-b)))
+        ;; For subsequent additions, maintain the price ratio
+        (if (is-eq reserve-a u0) 
+          (set liquidity-minted amount-a)
+          (set liquidity-minted (/ (* amount-a liquidity-total) reserve-a))
+        )
+      )
+      
+      ;; Check minimum liquidity requirement
+      (asserts! (>= liquidity-minted min-liquidity) err-slippage-exceeded)
+      
+      ;; Update reserves and total liquidity
+      (map-set pairs 
+        { token-a: token-a, token-b: token-b }
+        { 
+          reserve-a: (+ reserve-a amount-a), 
+          reserve-b: (+ reserve-b amount-b), 
+          liquidity-total: (+ liquidity-total liquidity-minted)
+        }
+      )
+      
+      ;; Update liquidity provider's balance
+      (map-set liquidity-providers
+        { token-a: token-a, token-b: token-b, provider: tx-sender }
+        { 
+          liquidity-provided: (+ 
+            (default-to u0 
+              (get liquidity-provided 
+                (map-get? liquidity-providers { token-a: token-a, token-b: token-b, provider: tx-sender })
+              )
+            ) 
+            liquidity-minted
+          )
+        }
+      )
+      
+      (ok liquidity-minted)
+    )
+  )
+)
+
+
