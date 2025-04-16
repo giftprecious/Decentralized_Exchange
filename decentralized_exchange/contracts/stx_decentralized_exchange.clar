@@ -360,3 +360,23 @@
   )
 )
 
+;; Get pair data
+(define-read-only (get-pair-data (token-a-contract principal) (token-b-contract principal))
+  (map-get? pairs { token-a: token-a-contract, token-b: token-b-contract })
+)
+
+;; Get liquidity provider data
+(define-read-only (get-liquidity-provider-data (token-a-contract principal) (token-b-contract principal) (provider principal))
+  (map-get? liquidity-providers { token-a: token-a-contract, token-b: token-b-contract, provider: provider })
+)
+
+;; Set the protocol fee percentage (only contract owner)
+(define-public (set-protocol-fee-percent (new-fee-percent uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (<= new-fee-percent u1000) (err u113)) ;; Max fee is 10%
+    (var-set protocol-fee-percent new-fee-percent)
+    (ok true)
+  )
+)
+
