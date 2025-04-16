@@ -380,3 +380,17 @@
   )
 )
 
+;; Helper function: Square root calculation
+(define-private (sqrt (x uint))
+  (let
+    (
+      (guess (/ x u2))
+      (next-guess (/ (+ guess (/ x guess)) u2))
+    )
+    (if (or (is-eq guess next-guess) (is-eq guess (- next-guess u1)))
+      guess
+      (sqrt-iter x next-guess)
+    )
+  )
+)
+
