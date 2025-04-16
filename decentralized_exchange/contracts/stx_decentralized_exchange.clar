@@ -239,3 +239,51 @@
   )
 )
 
+;; Swap function: token-a for token-b
+(define-public (swap-a-for-b 
+  (token-a-contract <sip-010-trait>) 
+  (token-b-contract <sip-010-trait>) 
+  (amount-in uint)
+  (min-amount-out uint))
+  (let
+    (
+      (token-a (contract-of token-a-contract))
+      (token-b (contract-of token-b-contract))
+      (pair-data (unwrap! (map-get? pairs { token-a: token-a, token-b: token-b }) err-pair-not-found))
+      (reserve-a (get reserve-a pair-data))
+      (reserve-b (get reserve-b pair-data))
+      (protocol-fee (/ (* amount-in (var-get protocol-fee-percent)) u10000))
+      (amount-in-with-fee (- amount-in protocol-fee))
+      (amount-out (get-output-amount amount-in-with-fee reserve-a reserve-b))
+      (new-reserve-a (+ reserve-a amount-in))
+      (new-reserve-b (- reserve-b amount-out))
+    )
+    (begin
+      ;; Check inputs
+      (asserts! (> amount-in u0) err-zero-amount)
+      (asserts! (> reserve-a u0) err-zero-liquidity)
+      (asserts! (> reserve-b u0) err-zero-liquidity)
+      (asserts! (>= amount-out min-amount-out) err-slippage-exceeded)
+      (asserts! (> amount-out u0) err-zero-amount)
+      
+      ;; Transfer token-a from sender to contract
+      (try! (contract-call? token-a-contract transfer amount-in tx-sender (as-contract tx-sender) none))
+      
+      ;; Transfer token-b from contract to sender
+      (as-contract (try! (contract-call? token-b-contract transfer amount-out tx-sender tx-sender none)))
+      
+      ;; Update reserves
+      (map-set pairs 
+        { token-a: token-a, token-b: token-b }
+        { 
+          reserve-a: new-reserve-a, 
+          reserve-b: new-reserve-b, 
+          liquidity-total: (get liquidity-total pair-data)
+        }
+      )
+      
+      (ok amount-out)
+    )
+  )
+)
+
