@@ -286,4 +286,63 @@
     )
   )
 )
+;; Swap function: token-b for token-a
+(define-public (swap-b-for-a 
+  (token-a-contract <sip-010-trait>) 
+  (token-b-contract <sip-010-trait>) 
+  (amount-in uint)
+  (min-amount-out uint))
+  (let
+    (
+      (token-a (contract-of token-a-contract))
+      (token-b (contract-of token-b-contract))
+      (pair-data (unwrap! (map-get? pairs { token-a: token-a, token-b: token-b }) err-pair-not-found))
+      (reserve-a (get reserve-a pair-data))
+      (reserve-b (get reserve-b pair-data))
+      (protocol-fee (/ (* amount-in (var-get protocol-fee-percent)) u10000))
+      (amount-in-with-fee (- amount-in protocol-fee))
+      (amount-out (get-output-amount amount-in-with-fee reserve-b reserve-a))
+      (new-reserve-a (- reserve-a amount-out))
+      (new-reserve-b (+ reserve-b amount-in))
+    )
+    (begin
+      ;; Check inputs
+      (asserts! (> amount-in u0) err-zero-amount)
+      (asserts! (> reserve-a u0) err-zero-liquidity)
+      (asserts! (> reserve-b u0) err-zero-liquidity)
+      (asserts! (>= amount-out min-amount-out) err-slippage-exceeded)
+      (asserts! (> amount-out u0) err-zero-amount)
+      
+      ;; Transfer token-b from sender to contract
+      (try! (contract-call? token-b-contract transfer amount-in tx-sender (as-contract tx-sender) none))
+      
+      ;; Transfer token-a from contract to sender
+      (as-contract (try! (contract-call? token-a-contract transfer amount-out tx-sender tx-sender none)))
+      
+      ;; Update reserves
+      (map-set pairs 
+        { token-a: token-a, token-b: token-b }
+        { 
+          reserve-a: new-reserve-a, 
+          reserve-b: new-reserve-b, 
+          liquidity-total: (get liquidity-total pair-data)
+        }
+      )
+      
+      (ok amount-out)
+    )
+  )
+)
+
+;; Get the output amount based on the constant product formula (x * y = k)
+(define-private (get-output-amount (amount-in uint) (reserve-in uint) (reserve-out uint))
+  (let
+    (
+      (numerator (* amount-in reserve-out))
+      (denominator (+ reserve-in amount-in))
+    )
+    (/ numerator denominator)
+  )
+)
+
 
