@@ -345,4 +345,18 @@
   )
 )
 
+;; Get current price (token-b per token-a)
+(define-read-only (get-price (token-a-contract principal) (token-b-contract principal))
+  (let
+    (
+      (pair-data (unwrap! (map-get? pairs { token-a: token-a-contract, token-b: token-b-contract }) err-pair-not-found))
+      (reserve-a (get reserve-a pair-data))
+      (reserve-b (get reserve-b pair-data))
+    )
+    (begin
+      (asserts! (and (> reserve-a u0) (> reserve-b u0)) err-zero-liquidity)
+      (ok (/ reserve-b reserve-a))
+    )
+  )
+)
 
