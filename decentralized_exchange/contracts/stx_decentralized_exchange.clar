@@ -184,4 +184,58 @@
   )
 )
 
+;; Remove liquidity from a pair
+(define-public (remove-liquidity 
+  (token-a-contract <sip-010-trait>) 
+  (token-b-contract <sip-010-trait>) 
+  (liquidity-amount uint)
+  (min-amount-a uint)
+  (min-amount-b uint))
+  (let
+    (
+      (token-a (contract-of token-a-contract))
+      (token-b (contract-of token-b-contract))
+      (pair-data (unwrap! (map-get? pairs { token-a: token-a, token-b: token-b }) err-pair-not-found))
+      (reserve-a (get reserve-a pair-data))
+      (reserve-b (get reserve-b pair-data))
+      (liquidity-total (get liquidity-total pair-data))
+      (provider-data (unwrap! (map-get? liquidity-providers { token-a: token-a, token-b: token-b, provider: tx-sender }) err-not-liquidity-provider))
+      (provider-liquidity (get liquidity-provided provider-data))
+      (amount-a-to-return (/ (* liquidity-amount reserve-a) liquidity-total))
+      (amount-b-to-return (/ (* liquidity-amount reserve-b) liquidity-total))
+    )
+    (begin
+      ;; Check liquidity parameters
+      (asserts! (> liquidity-amount u0) err-zero-amount)
+      (asserts! (>= provider-liquidity liquidity-amount) err-insufficient-balance)
+      (asserts! (> liquidity-total u0) err-no-liquidity)
+      
+      ;; Check minimum amount requirements
+      (asserts! (>= amount-a-to-return min-amount-a) err-slippage-exceeded)
+      (asserts! (>= amount-b-to-return min-amount-b) err-slippage-exceeded)
+      
+      ;; Update reserves and total liquidity
+      (map-set pairs 
+        { token-a: token-a, token-b: token-b }
+        { 
+          reserve-a: (- reserve-a amount-a-to-return), 
+          reserve-b: (- reserve-b amount-b-to-return), 
+          liquidity-total: (- liquidity-total liquidity-amount)
+        }
+      )
+      
+      ;; Update provider's liquidity balance
+      (map-set liquidity-providers
+        { token-a: token-a, token-b: token-b, provider: tx-sender }
+        { liquidity-provided: (- provider-liquidity liquidity-amount) }
+      )
+      
+      ;; Transfer tokens back to the provider
+      (as-contract (contract-call? token-a-contract transfer amount-a-to-return tx-sender tx-sender none))
+      (as-contract (contract-call? token-b-contract transfer amount-b-to-return tx-sender tx-sender none))
+      
+      (ok { amount-a: amount-a-to-return, amount-b: amount-b-to-return })
+    )
+  )
+)
 
