@@ -98,5 +98,4 @@ The first liquidity provider for a pair establishes the initial price ratio. Sub
 - No flash loan protection
 - Users should be aware of potential slippage when trading
 
-License
-[Insert your license information here]
+
